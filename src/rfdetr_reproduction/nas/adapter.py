@@ -158,6 +158,10 @@ def build_official_rfdetr_supernet(
         "build_criterion_and_postprocessors",
         ["rfdetr.models.lwdetr", "rfdetr.models"],
     )
+    # Try official populate_args if available in rfdetr so all new model flags (e.g. use_cls_token) are populated
+    populate_args = find_rfdetr_symbol(
+        "populate_args", ["rfdetr.main", "rfdetr.models.lwdetr", "rfdetr.config"]
+    )
     defaults = {
         "vit_encoder_num_layers": 12,
         "pretrained_encoder": None,
@@ -188,11 +192,22 @@ def build_official_rfdetr_supernet(
         "sum_group_losses": False,
         "use_varifocal_loss": False,
         "use_position_supervised_loss": False,
+        "use_cls_token": False,
+        "freeze_encoder": False,
+        "num_feature_levels": 1,
+        "fp16_eval": False,
+        "use_ema": True,
     }
     merged = {**defaults, **tc.model_dump(), **mc.model_dump()}
     merged["window_block_indexes"] = list(paper_config["window_block_indexes"])
     merged["aux_loss"] = True
-    args = SimpleNamespace(**merged)
+    if populate_args is not None:
+        try:
+            args = populate_args(**merged)
+        except Exception:
+            args = SimpleNamespace(**merged)
+    else:
+        args = SimpleNamespace(**merged)
 
     model = build_model(args)
     criterion, postprocessors = build_criterion_and_postprocessors(args)

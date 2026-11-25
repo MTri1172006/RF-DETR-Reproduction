@@ -1,7 +1,7 @@
 # Core deep learning & official RF-DETR (pinned to exact commit from notebook reproduction)
 torch==2.5.1
 torchvision==0.20.1
-rfdetr @ git+https://github.com/roboflow/rf-detr.git@382607f3d7ecbf513b991a8ee9f1a3abe3a340f0
+rfdetr[train,loggers] @ git+https://github.com/roboflow/rf-detr.git@382607f3d7ecbf513b991a8ee9f1a3abe3a340f0
 
 # Data, evaluation & visualization
 pycocotools==2.0.8

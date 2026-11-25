@@ -14,12 +14,15 @@ from rfdetr_reproduction.nas.adapter import RFDETRNASAdapter, get_nested_tensor_
 
 
 def resolve_device_and_amp(device_str: str | None = None) -> tuple[torch.device, torch.dtype, bool]:
-    """Resolve torch device, AMP dtype (`bfloat16` on L4 / Ampere+, else `float16`), and CUDA flag."""
+    """Resolve torch device, enable TF32/cuDNN benchmark on CUDA, and pick AMP dtype."""
     if device_str is None:
         device_str = "cuda" if torch.cuda.is_available() else "cpu"
     device = torch.device(device_str)
     is_cuda = device.type == "cuda"
     if is_cuda:
+        torch.backends.cuda.matmul.allow_tf32 = True
+        torch.backends.cudnn.allow_tf32 = True
+        torch.backends.cudnn.benchmark = True
         use_bf16 = torch.cuda.is_bf16_supported()
         amp_dtype = torch.bfloat16 if use_bf16 else torch.float16
     else:
