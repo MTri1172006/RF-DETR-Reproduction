@@ -1,0 +1,43 @@
+# Datasets & raw downloads
+data/*
+!data/README.md
+
+# Model checkpoints & weights (~500 MB+)
+checkpoints/*.pth
+checkpoints/*.pt
+checkpoints/*.pth.tmp
+checkpoints/*.part
+checkpoints/pretrained/
+checkpoints/diagnostics/
+checkpoints/nas/
+!checkpoints/README.md
+
+# Experiment outputs & artifacts
+outputs/*
+!outputs/nas/
+!outputs/diagnostics/
+!outputs/grid_search/
+!outputs/deployment/
+!outputs/baselines/
+outputs/nas/*
+outputs/diagnostics/*
+outputs/grid_search/*
+outputs/deployment/*
+outputs/baselines/*
+!outputs/**/.gitkeep
+
+# Python / build / IDE caches
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.eggs/
+build/
+dist/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.venv/
+venv/
+.DS_Store
+Thumbs.db

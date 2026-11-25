@@ -1,0 +1,27 @@
+# Core deep learning & official RF-DETR (pinned to exact commit from notebook reproduction)
+torch==2.5.1
+torchvision==0.20.1
+rfdetr @ git+https://github.com/roboflow/rf-detr.git@382607f3d7ecbf513b991a8ee9f1a3abe3a340f0
+
+# Data, evaluation & visualization
+pycocotools==2.0.8
+numpy==1.26.4
+pandas==2.2.3
+matplotlib==3.9.2
+Pillow==10.4.0
+tqdm==4.66.5
+
+# Deployment & export
+onnx==1.17.0
+onnxruntime-gpu==1.19.2
+
+# Fair comparison baselines
+ultralytics==8.3.20
+
+# Testing
+pytest==8.3.3
+
+# Optional cloud backup backends (uncomment as needed)
+# huggingface_hub==0.26.2
+# wandb==0.18.5
+# boto3==1.35.50
