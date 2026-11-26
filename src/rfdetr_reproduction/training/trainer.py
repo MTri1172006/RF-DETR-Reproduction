@@ -22,7 +22,7 @@ from rfdetr_reproduction.nas.adapter import (
     ensure_coco_pretrain_checkpoint,
     load_coco_pretrain_into_supernet,
 )
-from rfdetr_reproduction.nas.sampling import sample_uniform_subnet
+from rfdetr_reproduction.nas.sampling import AdaptiveNASSampler, sample_uniform_subnet
 from rfdetr_reproduction.nas.search_space import build_train_search_space
 from rfdetr_reproduction.training.checkpoint import load_nas_checkpoint, save_nas_checkpoints
 from rfdetr_reproduction.training.train_utils import (
@@ -54,7 +54,7 @@ def train_one_nas_epoch(
     epoch_idx: int,
     total_epochs: int,
     ema_tracker: SupernetEMA | None = None,
-    subnet_sampler: Callable[[], dict[str, Any]] | None = None,
+    subnet_sampler: AdaptiveNASSampler | Callable[[], dict[str, Any]] | None = None,
     max_steps: int | None = None,
 ) -> dict[str, Any]:
     """Run one Weight-Sharing NAS epoch with gradient accumulation and per-step subnet sampling."""
@@ -62,7 +62,8 @@ def train_one_nas_epoch(
     criterion.train()
     optimizer.zero_grad(set_to_none=True)
 
-    sampler = subnet_sampler or (lambda: sample_uniform_subnet(valid_train_configs))
+    is_adaptive = isinstance(subnet_sampler, AdaptiveNASSampler)
+    fallback_sampler = subnet_sampler or (lambda: sample_uniform_subnet(valid_train_configs))
     total_loss = 0.0
     n_steps = 0
     sampled_hist: list[tuple[int, int, int]] = []
@@ -71,7 +72,11 @@ def train_one_nas_epoch(
     if is_cuda:
         torch.cuda.reset_peak_memory_stats(device)
 
-    current_cfg = sampler()
+    current_cfg = (
+        subnet_sampler.sample(epoch=epoch_idx, micro_step_idx=0)
+        if is_adaptive
+        else fallback_sampler()
+    )
     total_loader_steps = len(train_loader) if max_steps is None else min(len(train_loader), max_steps)
 
     for step, (img_list, targets) in enumerate(
@@ -79,8 +84,21 @@ def train_one_nas_epoch(
     ):
         if max_steps is not None and step >= max_steps:
             break
-        if step % accum_steps == 0:
-            current_cfg = sampler()
+
+        micro_idx = step % accum_steps
+        if is_adaptive:
+            if subnet_sampler.strategy == "sandwich":
+                current_cfg = subnet_sampler.sample(epoch=epoch_idx, micro_step_idx=micro_idx)
+                sampled_hist.append(
+                    (current_cfg["resolution"], current_cfg["patch_size"], current_cfg["num_windows"])
+                )
+            elif micro_idx == 0:
+                current_cfg = subnet_sampler.sample(epoch=epoch_idx, micro_step_idx=0)
+                sampled_hist.append(
+                    (current_cfg["resolution"], current_cfg["patch_size"], current_cfg["num_windows"])
+                )
+        elif micro_idx == 0:
+            current_cfg = fallback_sampler()
             sampled_hist.append(
                 (current_cfg["resolution"], current_cfg["patch_size"], current_cfg["num_windows"])
             )
@@ -138,6 +156,8 @@ def run_nas_training(
     epochs: int | None = None,
     resume: bool = True,
     use_coco_pretrain: bool | None = None,
+    sampling_strategy: str | None = None,
+    exp_tag: str | None = None,
     device_str: str | None = None,
     max_steps_per_epoch: int | None = None,
     backup_manager: BackupManager | None = None,
@@ -153,6 +173,20 @@ def run_nas_training(
     load_pretrain = (
         bool(nas_config["use_coco_pretrain"]) if use_coco_pretrain is None else use_coco_pretrain
     )
+    resolved_strategy = sampling_strategy or str(nas_config.get("sampling_strategy", "uniform"))
+
+    # Separate checkpoint & output filenames when `exp_tag` is specified (preserves baseline)
+    tag_clean = (exp_tag or "").strip()
+    if tag_clean:
+        latest_ckpt_path = paths.nas_ckpt_dir / f"nas_supernet_{tag_clean}_latest.pth"
+        ema_ckpt_path = paths.nas_ckpt_dir / f"nas_supernet_{tag_clean}_ema_only.pth"
+        history_csv = paths.nas_output_dir / f"nas_train_history_{tag_clean}.csv"
+        run_cfg_json = paths.nas_output_dir / f"run_config_{tag_clean}.json"
+    else:
+        latest_ckpt_path = paths.nas_latest_ckpt
+        ema_ckpt_path = paths.nas_ema_ckpt
+        history_csv = paths.nas_output_dir / "nas_train_history.csv"
+        run_cfg_json = paths.nas_output_dir / "run_config.json"
 
     device, amp_dtype, is_cuda = resolve_device_and_amp(device_str)
     provenance = collect_provenance(seed=seed, require_cuda=False)
@@ -164,13 +198,21 @@ def run_nas_training(
     )
     assert len(valid_train_configs) > 0, "No valid training NAS configs!"
 
+    sampler = AdaptiveNASSampler.from_config(
+        valid_configs=valid_train_configs,
+        nas_config=nas_config,
+        strategy=resolved_strategy,
+        seed=seed,
+    )
+    logger.info("Initialized NAS sampler: %s", sampler.summary())
+
     official_model, criterion, _, _ = build_official_rfdetr_supernet(
         dataset_root=paths.dataset_root,
         num_classes=NUM_CLASSES,
         device=device,
         paper_config=paper_config,
     )
-    if load_pretrain and not (resume and paths.nas_latest_ckpt.exists()):
+    if load_pretrain and not (resume and latest_ckpt_path.exists()):
         pretrain_ckpt = ensure_coco_pretrain_checkpoint(paths.coco_pretrain_path)
         load_coco_pretrain_into_supernet(official_model, pretrain_ckpt)
 
@@ -195,9 +237,9 @@ def run_nas_training(
 
     start_epoch = 1
     train_history: list[dict[str, Any]] = []
-    if resume and paths.nas_latest_ckpt.exists():
+    if resume and latest_ckpt_path.exists():
         start_epoch, train_history, _ = load_nas_checkpoint(
-            paths.nas_latest_ckpt,
+            latest_ckpt_path,
             model=nas_model.model,
             ema_tracker=ema_tracker,
             optimizer=optimizer,
@@ -205,7 +247,11 @@ def run_nas_training(
             device=device,
         )
     else:
-        logger.info("Starting NAS supernet training from epoch 1.")
+        logger.info(
+            "Starting NAS supernet training from epoch 1 (strategy=%s, exp_tag=%s).",
+            resolved_strategy,
+            tag_clean or "default",
+        )
 
     save_json(
         {
@@ -213,13 +259,15 @@ def run_nas_training(
             "provenance": provenance,
             "paper_config": paper_config,
             "nas_config": nas_config,
+            "sampling_strategy": resolved_strategy,
+            "sampler_summary": sampler.summary(),
+            "exp_tag": tag_clean or None,
             "epochs": total_epochs,
             "use_coco_pretrain": load_pretrain,
         },
-        paths.nas_output_dir / "run_config.json",
+        run_cfg_json,
     )
 
-    history_csv = paths.nas_output_dir / "nas_train_history.csv"
     for ep in range(start_epoch, total_epochs + 1):
         stats = train_one_nas_epoch(
             nas_model=nas_model,
@@ -235,14 +283,15 @@ def run_nas_training(
             epoch_idx=ep,
             total_epochs=total_epochs,
             ema_tracker=ema_tracker,
+            subnet_sampler=sampler,
             max_steps=max_steps_per_epoch,
         )
         train_history.append(stats)
         logger.info("Epoch %d stats: %s", ep, stats)
 
         save_nas_checkpoints(
-            latest_path=paths.nas_latest_ckpt,
-            ema_only_path=paths.nas_ema_ckpt,
+            latest_path=latest_ckpt_path,
+            ema_only_path=ema_ckpt_path,
             epoch=ep,
             model=nas_model.model,
             ema_tracker=ema_tracker,
@@ -257,7 +306,7 @@ def run_nas_training(
 
     if backup_manager is not None:
         backup_manager.sync_files(
-            [paths.nas_latest_ckpt, paths.nas_ema_ckpt, history_csv],
+            [latest_ckpt_path, ema_ckpt_path, history_csv, run_cfg_json],
             subdir="training",
         )
     return train_history

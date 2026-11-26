@@ -15,6 +15,21 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Train RF-DETR Weight-Sharing NAS supernet.")
     add_path_args(parser)
     parser.add_argument("--epochs", type=int, default=NAS_CONFIG["nas_epochs"])
+    parser.add_argument(
+        "--sampling-strategy",
+        type=str,
+        default=NAS_CONFIG["sampling_strategy"],
+        choices=["uniform", "pruned_anchor", "sandwich"],
+        help="NAS supernet sampling strategy (default: uniform).",
+    )
+    parser.add_argument(
+        "--exp-tag",
+        "--exp-name",
+        dest="exp_tag",
+        type=str,
+        default=None,
+        help="Optional experiment suffix for checkpoints & logs (e.g., pab_nas, sandwich_nas).",
+    )
     parser.add_argument("--no-resume", action="store_true", help="Start fresh instead of resuming.")
     parser.add_argument("--no-pretrain", action="store_true", help="Disable COCO pretrain init.")
     parser.add_argument("--device", type=str, default=None, help="Torch device (e.g. cuda, cpu).")
@@ -35,6 +50,8 @@ def main() -> None:
         epochs=args.epochs,
         resume=not args.no_resume,
         use_coco_pretrain=not args.no_pretrain,
+        sampling_strategy=args.sampling_strategy,
+        exp_tag=args.exp_tag,
         device_str=args.device,
         max_steps_per_epoch=args.max_steps,
         backup_manager=backup,

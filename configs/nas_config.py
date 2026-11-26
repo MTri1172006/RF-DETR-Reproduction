@@ -18,6 +18,15 @@ NUM_WORKERS = 2
 TRAIN_MAX_TOKENS_L4 = 5776
 MIN_GRID_SIZE = 8
 
+# Pruned & Anchor-Budgeted NAS Sampling (PAB-NAS) + Sandwich Micro-Batching
+SAMPLING_STRATEGY = "uniform"          # Default baseline: "uniform" | "pruned_anchor" | "sandwich"
+PRUNED_PATCH_SIZES = (12, 14, 16)      # Prune p=32 (negative gradient conflict) & extreme patch sizes
+PRUNED_NUM_WINDOWS = (1, 2)            # Prune w=4 (Pareto-dominated by w=2)
+PHASE1_EPOCHS = 8                      # Ep 1..8: uniform on pruned space to cross T90
+CORE_PARETO_PROB = 0.68                # ~68% core Pareto region (Hypo 2 sweet spot ~0.70)
+ANCHOR_RESOLUTIONS = (320, 384, 448)   # ~32% anchor budget protecting small subnets from weight drift
+CORE_RESOLUTIONS = (512, 576, 640, 704)
+
 NAS_CONFIG = {
     "seed": SEED,
     "micro_batch": MICRO_BATCH,
@@ -29,6 +38,13 @@ NAS_CONFIG = {
     "train_max_tokens_l4": TRAIN_MAX_TOKENS_L4,
     "min_grid_size": MIN_GRID_SIZE,
     "valid_split_ratio": 0.1,
+    "sampling_strategy": SAMPLING_STRATEGY,
+    "pruned_patch_sizes": PRUNED_PATCH_SIZES,
+    "pruned_num_windows": PRUNED_NUM_WINDOWS,
+    "phase1_epochs": PHASE1_EPOCHS,
+    "core_pareto_prob": CORE_PARETO_PROB,
+    "anchor_resolutions": ANCHOR_RESOLUTIONS,
+    "core_resolutions": CORE_RESOLUTIONS,
 }
 
 

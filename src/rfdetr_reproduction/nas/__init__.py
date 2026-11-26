@@ -1,6 +1,7 @@
 """Weight-Sharing NAS search space, validation, sampling, and official RF-DETR adapter."""
 
 from rfdetr_reproduction.nas.sampling import (
+    AdaptiveNASSampler,
     get_train_cfg,
     sample_biased_subnet,
     sample_uniform_subnet,

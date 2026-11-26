@@ -16,7 +16,14 @@ from rfdetr_reproduction.utils.paths import ProjectPaths, add_path_args
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Run Gradient Conflict diagnosis across subnets.")
     add_path_args(parser)
-    parser.add_argument("--ckpt", type=Path, default=None, help="Optional checkpoint path.")
+    parser.add_argument(
+        "--ckpt",
+        "--checkpoint",
+        dest="ckpt",
+        type=Path,
+        default=None,
+        help="Optional checkpoint path.",
+    )
     parser.add_argument("--use-ema", action="store_true", help="Evaluate EMA weights instead of train weights.")
     parser.add_argument("--tag", type=str, default=None, help="Output filename tag (e.g., ep0, ep20).")
     parser.add_argument("--num-batches", type=int, default=GRADIENT_CONFLICT_CONFIG["num_batches"])

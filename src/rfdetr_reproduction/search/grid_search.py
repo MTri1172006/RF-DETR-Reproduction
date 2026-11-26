@@ -36,6 +36,7 @@ def run_grid_search_experiment(
     grid_config: dict[str, Any] = GRID_SEARCH_CONFIG,
     mode: str | None = None,
     checkpoint_path: Path | None = None,
+    exp_tag: str | None = None,
     max_images: int | None = None,
     device_str: str | None = None,
     backup_manager: BackupManager | None = None,
@@ -77,9 +78,11 @@ def run_grid_search_experiment(
 
     logger.info("Grid search mode=%s -> Evaluating %d validated subnets...", search_mode, len(configs_to_eval))
 
-    results_csv = paths.grid_search_output_dir / "nas_validation_results.csv"
-    pareto_csv = paths.grid_search_output_dir / "pareto_frontier.csv"
-    pareto_png = paths.grid_search_output_dir / "nas_pareto_frontier.png"
+    tag_clean = (exp_tag or "").strip()
+    suffix = f"_{tag_clean}" if tag_clean else ""
+    results_csv = paths.grid_search_output_dir / f"nas_validation_results{suffix}.csv"
+    pareto_csv = paths.grid_search_output_dir / f"pareto_frontier{suffix}.csv"
+    pareto_png = paths.grid_search_output_dir / f"nas_pareto_frontier{suffix}.png"
 
     done_ids: set[str] = set()
     rows: list[dict[str, Any]] = []

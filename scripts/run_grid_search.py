@@ -21,7 +21,22 @@ def parse_args() -> argparse.Namespace:
         choices=["representative", "full"],
         default=GRID_SEARCH_CONFIG["mode"],
     )
-    parser.add_argument("--ckpt", type=Path, default=None, help="EMA/NAS checkpoint path.")
+    parser.add_argument(
+        "--ckpt",
+        "--checkpoint",
+        dest="ckpt",
+        type=Path,
+        default=None,
+        help="EMA/NAS checkpoint path.",
+    )
+    parser.add_argument(
+        "--exp-tag",
+        "--exp-name",
+        dest="exp_tag",
+        type=str,
+        default=None,
+        help="Optional suffix for Grid Search & Pareto outputs (e.g., pab_nas, sandwich_nas).",
+    )
     parser.add_argument("--max-images", type=int, default=None, help="Cap valid images (smoke test).")
     parser.add_argument("--device", type=str, default=None)
     parser.add_argument("--backup-backend", choices=["local", "hf", "wandb", "s3"], default="local")
@@ -40,6 +55,7 @@ def main() -> None:
         grid_config=GRID_SEARCH_CONFIG,
         mode=args.mode,
         checkpoint_path=args.ckpt,
+        exp_tag=args.exp_tag,
         max_images=args.max_images,
         device_str=args.device,
         backup_manager=backup,
